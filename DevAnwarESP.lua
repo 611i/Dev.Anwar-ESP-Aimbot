@@ -1,284 +1,200 @@
--- Made By: Anwar🇮🇶 | TikTok: @hf4_l | Dev.Anwar ESP + Aimbot GUI
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
+local AimPart = "HumanoidRootPart"
+local PredictAmount = 15
+local IsAiming = false
+local AimStrength = 1
+local AimZoneRadius = 50
+local MaxDistance = 1000
+local CurrentTarget = nil
+local ESPDrawings, BoxAdorns = {}, {}
 
--- إنشاء واجهة رئيسية
-local gui = Instance.new("ScreenGui")
-gui.Name = "DevAnwarESP"
-gui.ResetOnSpawn = false
-gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
--- زر دائري خارجي لتحريك وفتح القائمة
-local circleBtn = Instance.new("TextButton")
-circleBtn.Size = UDim2.new(0, 60, 0, 60)
-circleBtn.Position = UDim2.new(0.5, -30, 0.05, 0)
-circleBtn.Text = "Dev.Anwar"
-circleBtn.TextColor3 = Color3.new(1, 1, 1)
-circleBtn.Font = Enum.Font.GothamBold
-circleBtn.TextSize = 12
-circleBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-circleBtn.BorderSizePixel = 0
-circleBtn.Name = "DevAnwarButton"
-circleBtn.Parent = gui
-circleBtn.Active = true
-circleBtn.Draggable = true
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(1, 0)
-corner.Parent = circleBtn
-
--- الإطار الداخلي للقائمة (الـESP + Aimbot)
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 220, 0, 180)
-mainFrame.Position = UDim2.new(0.5, -110, 0.5, -90)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-mainFrame.Visible = false
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.Parent = gui
-
-local corner2 = Instance.new("UICorner")
-corner2.CornerRadius = UDim.new(0, 10)
-corner2.Parent = mainFrame
-
--- عنوان الحقوق (مكان العنوان القديم)
-local rightsLabel = Instance.new("TextLabel")
-rightsLabel.Size = UDim2.new(1, 0, 0, 20)
-rightsLabel.Position = UDim2.new(0, 0, 0, 0)
-rightsLabel.BackgroundTransparency = 1
-rightsLabel.Text = "Made By: Anwar🇮🇶"
-rightsLabel.TextColor3 = Color3.new(1, 1, 1)
-rightsLabel.Font = Enum.Font.SourceSansSemibold
-rightsLabel.TextSize = 16
-rightsLabel.Parent = mainFrame
-
-local rightsLabel2 = Instance.new("TextLabel")
-rightsLabel2.Size = UDim2.new(1, 0, 0, 20)
-rightsLabel2.Position = UDim2.new(0, 0, 0, 25)
-rightsLabel2.BackgroundTransparency = 1
-rightsLabel2.Text = "TikTok: @hf4_l"
-rightsLabel2.TextColor3 = Color3.new(1, 1, 1)
-rightsLabel2.Font = Enum.Font.SourceSansSemibold
-rightsLabel2.TextSize = 14
-rightsLabel2.Parent = mainFrame
-
--- --------------------
--- زر تفعيل وإيقاف Aimbot
-local aimbotEnabled = false
-local fovRadius = 150
-
-local toggleAimbotBtn = Instance.new("TextButton")
-toggleAimbotBtn.Size = UDim2.new(0, 200, 0, 30)
-toggleAimbotBtn.Position = UDim2.new(0, 10, 0, 55)
-toggleAimbotBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-toggleAimbotBtn.TextColor3 = Color3.new(1, 1, 1)
-toggleAimbotBtn.Font = Enum.Font.SourceSansBold
-toggleAimbotBtn.TextSize = 16
-toggleAimbotBtn.Text = "Aimbot: OFF"
-toggleAimbotBtn.Parent = mainFrame
-
--- إدخال تغيير حجم دائرة FOV
-local FOVInput = Instance.new("TextBox")
-FOVInput.Size = UDim2.new(0, 200, 0, 25)
-FOVInput.Position = UDim2.new(0, 10, 0, 90)
-FOVInput.PlaceholderText = "FOV Radius (50-500)"
-FOVInput.Text = tostring(fovRadius)
-FOVInput.ClearTextOnFocus = false
-FOVInput.TextColor3 = Color3.new(1, 1, 1)
-FOVInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-FOVInput.Font = Enum.Font.SourceSans
-FOVInput.TextSize = 14
-FOVInput.Parent = mainFrame
-
--- دائرة FOV مرسومة
+-- FOV Circle
 local FOVCircle = Drawing.new("Circle")
-FOVCircle.Radius = fovRadius
-FOVCircle.Thickness = 2
-FOVCircle.Color = Color3.fromRGB(0, 255, 255)
+FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+FOVCircle.Radius = 100
+FOVCircle.Thickness = 1
+FOVCircle.Color = Color3.fromRGB(255,255,255)
+FOVCircle.Transparency = 0.4
 FOVCircle.Filled = false
 FOVCircle.Visible = true
 
-toggleAimbotBtn.MouseButton1Click:Connect(function()
-    aimbotEnabled = not aimbotEnabled
-    toggleAimbotBtn.Text = aimbotEnabled and "Aimbot: ON" or "Aimbot: OFF"
-end)
+local function ClearBoxes()
+    for _, box in pairs(BoxAdorns) do box:Destroy() end
+    BoxAdorns = {}
+end
 
-FOVInput.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        local val = tonumber(FOVInput.Text)
-        if val and val >= 50 and val <= 500 then
-            fovRadius = val
-            FOVCircle.Radius = fovRadius
-        else
-            FOVInput.Text = tostring(fovRadius)
+local function DrawBox(player)
+    local char = player.Character
+    if not char then return end
+    local boxSize = Vector3.new(3, 6, 2)
+    local adorn = Instance.new("BoxHandleAdornment")
+    adorn.Name = "DevAnwar_Box"
+    adorn.Adornee = char:FindFirstChild("HumanoidRootPart")
+    adorn.AlwaysOnTop = true
+    adorn.ZIndex = 1
+    adorn.Size = boxSize
+    adorn.Transparency = 0.7
+    adorn.Color3 = player.TeamColor.Color
+    adorn.Parent = char
+    table.insert(BoxAdorns, adorn)
+end
+
+local function UpdateESP()
+    for _, d in pairs(ESPDrawings) do d:Remove() end
+    ESPDrawings = {}
+    ClearBoxes()
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
+            local head = player.Character.Head
+            local hp = player.Character.Humanoid
+            local distance = (head.Position - Camera.CFrame.Position).Magnitude
+            if hp.Health > 0 and distance <= MaxDistance then
+                local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                if onScreen then
+                    local line = Drawing.new("Line")
+                    line.From = Vector2.new(Camera.ViewportSize.X / 2, 0)
+                    line.To = Vector2.new(pos.X, pos.Y)
+                    line.Color = player.TeamColor.Color
+                    line.Thickness = 1
+                    line.Transparency = 0.6
+                    line.Visible = true
+                    table.insert(ESPDrawings, line)
+
+                    local text = Drawing.new("Text")
+                    text.Text = string.format("%s | %.0fm | %d%%", player.Name, distance, math.floor(hp.Health / hp.MaxHealth * 100))
+                    text.Position = Vector2.new(pos.X, pos.Y - 20)
+                    text.Size = 12
+                    text.Color = player.TeamColor.Color
+                    text.Center = true
+                    text.Outline = true
+                    text.Visible = true
+                    table.insert(ESPDrawings, text)
+
+                    DrawBox(player)
+                end
+            end
         end
     end
-end)
+end
 
--- التعديل هنا في دالة getClosestPlayer
-local function getClosestPlayer()
-    local closest = nil
-    local shortestDist = math.huge
-    local camPos = Camera.CFrame.Position
-    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+local function GetClosestToCrosshair()
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    local closestPlayer, closestDist = nil, math.huge
 
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
-            local headPos = plr.Character.Head.Position
-            local dist = (headPos - camPos).Magnitude
-
-            local screenPos, onScreen = Camera:WorldToViewportPoint(headPos)
-            local screenPos2D = Vector2.new(screenPos.X, screenPos.Y)
-            local distToCenter = (screenPos2D - center).Magnitude
-
-            if dist < shortestDist and distToCenter <= fovRadius and onScreen then
-                shortestDist = dist
-                closest = plr
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(AimPart) and player.Character:FindFirstChild("Humanoid") then
+            if player.Character.Humanoid.Health > 0 then
+                local pos, onScreen = Camera:WorldToViewportPoint(player.Character[AimPart].Position)
+                if onScreen then
+                    local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                    local worldDist = (player.Character[AimPart].Position - Camera.CFrame.Position).Magnitude
+                    if dist < closestDist and dist <= AimZoneRadius and worldDist <= MaxDistance then
+                        closestDist = dist
+                        closestPlayer = player
+                    end
+                end
             end
         end
     end
 
-    return closest
+    return closestPlayer
 end
 
--- وظيفة الاسب داخلي: دائرة الكشف لون أزرق شفاف (قليل الوضوح لكن واضح)
-local ESP = {}
-ESP.Enabled = true
-ESP.TeamCheck = false
-ESP.Players = true
-ESP.Boxes = true
-ESP.Names = true
-ESP.Tracers = true
-ESP.HealthBar = true
-ESP.Colors = {
-    Enemy = Color3.fromRGB(50, 150, 255),  -- أزرق شفاف غير قوي
-    Teammate = Color3.fromRGB(0, 255, 0)
-}
+-- GUI
+local gui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+gui.Name = "DevAnwar_Aimbot"
+gui.ResetOnSpawn = false
 
-local function Draw(type)
-    local obj = Drawing.new(type)
-    obj.Visible = false
-    return obj
-end
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 160, 0, 130)
+frame.Position = UDim2.new(0.02, 0, 0.3, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 2
+frame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+frame.Active = true
+frame.Draggable = true
 
-local function NewESP(player)
-    local box = Draw("Square")
-    local tracer = Draw("Line")
-    local name = Draw("Text")
-    local healthbar = Draw("Line")
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 20)
+title.BackgroundTransparency = 1
+title.Text = "made by Anwar"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 16
+title.Font = Enum.Font.SourceSansBold
 
-    return RunService.RenderStepped:Connect(function()
-        if not ESP.Enabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-            box.Visible = false
-            tracer.Visible = false
-            name.Visible = false
-            healthbar.Visible = false
-            return
-        end
+local toggle = Instance.new("TextButton", frame)
+toggle.Size = UDim2.new(0.9, 0, 0, 30)
+toggle.Position = UDim2.new(0.05, 0, 0.2, 0)
+toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+toggle.Text = "Aim OFF"
+toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggle.Font = Enum.Font.SourceSansBold
+toggle.TextSize = 18
 
-        local hrp = player.Character.HumanoidRootPart
-        local hum = player.Character:FindFirstChildOfClass("Humanoid")
-        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+local aimpartBtn = Instance.new("TextButton", frame)
+aimpartBtn.Size = UDim2.new(0.9, 0, 0, 20)
+aimpartBtn.Position = UDim2.new(0.05, 0, 0.55, 0)
+aimpartBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+aimpartBtn.Text = "Aim: Body"
+aimpartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+aimpartBtn.Font = Enum.Font.SourceSansBold
+aimpartBtn.TextSize = 14
 
-        if not onScreen then
-            box.Visible = false
-            tracer.Visible = false
-            name.Visible = false
-            healthbar.Visible = false
-            return
-        end
+local predict = Instance.new("TextButton", frame)
+predict.Size = UDim2.new(0.9, 0, 0, 30)
+predict.Position = UDim2.new(0.05, 0, 0.75, 0)
+predict.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+predict.Text = "Predict: "..PredictAmount
+predict.TextColor3 = Color3.fromRGB(255, 255, 255)
+predict.Font = Enum.Font.SourceSansBold
+predict.TextSize = 16
 
-        local color = ESP.Colors.Enemy
-        if ESP.TeamCheck and player.Team == LocalPlayer.Team then
-            color = ESP.Colors.Teammate
-        end
+toggle.MouseButton1Click:Connect(function()
+	IsAiming = not IsAiming
+	toggle.Text = IsAiming and "Aim ON" or "Aim OFF"
+end)
 
-        local top = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3, 0))
-        local bottom = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
-        local height = top.Y - bottom.Y
-        local width = height / 2
+predict.MouseButton1Click:Connect(function()
+	PredictAmount += 1
+	if PredictAmount > 30 then PredictAmount = 1 end
+	predict.Text = "Predict: "..PredictAmount
+end)
 
-        if ESP.Boxes then
-            box.Size = Vector2.new(width, height)
-            box.Position = Vector2.new(pos.X - width / 2, pos.Y - height / 2)
-            box.Color = color
-            box.Thickness = 2
-            box.Transparency = 0.5 -- شفاف أقل من الافتراضي
-            box.Visible = true
-        else
-            box.Visible = false
-        end
+aimpartBtn.MouseButton1Click:Connect(function()
+	if AimPart == "HumanoidRootPart" then
+		AimPart = "Head"
+		aimpartBtn.Text = "Aim: Head"
+	else
+		AimPart = "HumanoidRootPart"
+		aimpartBtn.Text = "Aim: Body"
+	end
+end)
 
-        if ESP.Tracers then
-            tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-            tracer.To = Vector2.new(pos.X, pos.Y)
-            tracer.Color = color
-            tracer.Thickness = 1
-            tracer.Transparency = 0.5
-            tracer.Visible = true
-        else
-            tracer.Visible = false
-        end
-
-        if ESP.Names then
-            name.Text = player.Name
-            name.Position = Vector2.new(pos.X, pos.Y - height / 2 - 15)
-            name.Color = color
-            name.Size = 16
-            name.Center = true
-            name.Outline = true
-            name.Visible = true
-        else
-            name.Visible = false
-        end
-
-        if ESP.HealthBar and hum then
-            local healthPercent = hum.Health / hum.MaxHealth
-            healthbar.From = Vector2.new(pos.X - width / 2 - 6, pos.Y + height / 2)
-            healthbar.To = Vector2.new(pos.X - width / 2 - 6, pos.Y + height / 2 - height * healthPercent)
-            healthbar.Color = Color3.fromRGB(0, 255, 0)
-            healthbar.Thickness = 2
-            healthbar.Visible = true
-        else
-            healthbar.Visible = false
-        end
-    end)
-end
-
-for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer then
-        coroutine.wrap(function()
-            NewESP(player)
-        end)()
-    end
-end
-
-Players.PlayerAdded:Connect(function(player)
-    if player ~= LocalPlayer then
-        coroutine.wrap(function()
-            NewESP(player)
-        end)()
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.X then
+        IsAiming = not IsAiming
+        toggle.Text = IsAiming and "Aim ON" or "Aim OFF"
     end
 end)
 
--- تحديث دائرة FOV ومكانها باستمرار (دائرة الأيمبوت)
 RunService.RenderStepped:Connect(function()
-    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    FOVCircle.Position = center
-    FOVCircle.Visible = true
+	UpdateESP()
 
-    if aimbotEnabled then
-        local target = getClosestPlayer()
-        if target and target.Character and target.Character:FindFirstChild("Head") then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
-        end
-    end
-end)
-
--- زر لفتح وغلق القائمة الداخلية عند الضغط على الزر الدائري الخارجي
-circleBtn.MouseButton1Click:Connect(function()
-    mainFrame.Visible = not mainFrame.Visible
+	if IsAiming then
+		if not CurrentTarget or not CurrentTarget.Character or CurrentTarget.Character:FindFirstChild("Humanoid") == nil or CurrentTarget.Character.Humanoid.Health <= 0 then
+			CurrentTarget = GetClosestToCrosshair()
+		end
+		if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild(AimPart) then
+			local part = CurrentTarget.Character[AimPart]
+			local predicted = part.Position + (part.Velocity * (PredictAmount / 100))
+			local aimCFrame = CFrame.new(Camera.CFrame.Position, predicted)
+			Camera.CFrame = Camera.CFrame:Lerp(aimCFrame, AimStrength)
+		end
+	end
 end)
