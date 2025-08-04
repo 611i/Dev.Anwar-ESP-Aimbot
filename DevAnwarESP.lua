@@ -18,6 +18,9 @@ local ESPDrawings, BoxAdorns = {}, {}
 -- قائمة تجاهل اللاعبين (Ignore List)
 local IgnoreList = {}
 
+-- متغير التحقق من الفريق خاص بالأيمبوت فقط
+local teamCheck = false
+
 -- دائرة FOV
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
@@ -250,87 +253,18 @@ fovBox.FocusLost:Connect(function()
 	end
 end)
 
--- *** قائمة تجاهل اللاعبين (Ignore Players List) ***
-
--- إطار القائمة الجديدة داخل الـ GUI
-local ignoreFrame = Instance.new("Frame", frame)
-ignoreFrame.Size = UDim2.new(0.9, 0, 0.3, 0)
-ignoreFrame.Position = UDim2.new(0.05, 0, 0.57, 0)
-ignoreFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-ignoreFrame.BorderSizePixel = 1
-ignoreFrame.BorderColor3 = Color3.fromRGB(100, 100, 100)
-
--- عنوان القائمة
-local ignoreTitle = Instance.new("TextLabel", ignoreFrame)
-ignoreTitle.Size = UDim2.new(1, 0, 0, 25)
-ignoreTitle.Position = UDim2.new(0, 0, 0, 0)
-ignoreTitle.BackgroundTransparency = 1
-ignoreTitle.Text = "Ignore Players"
-ignoreTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-ignoreTitle.TextSize = 16
-ignoreTitle.Font = Enum.Font.SourceSansBold
-
--- ScrollFrame لاحتواء الأسماء مع إمكانية التمرير
-local ignoreListFrame = Instance.new("ScrollingFrame", ignoreFrame)
-ignoreListFrame.Size = UDim2.new(1, 0, 1, -25)
-ignoreListFrame.Position = UDim2.new(0, 0, 0, 25)
-ignoreListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-ignoreListFrame.ScrollBarThickness = 6
-ignoreListFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-ignoreListFrame.BorderSizePixel = 0
-
--- تخزين أزرار اللاعبين
-local ignoreButtons = {}
-
--- وظيفة لتحديث قائمة الأسماء داخل الـ ScrollFrame
-local function UpdateIgnoreList()
-	-- نمسح الموجود سابقًا
-	for _, btn in pairs(ignoreButtons) do
-		btn:Destroy()
-	end
-	ignoreButtons = {}
-
-	local yPos = 0
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer then
-			local btn = Instance.new("TextButton", ignoreListFrame)
-			btn.Size = UDim2.new(1, -10, 0, 30)
-			btn.Position = UDim2.new(0, 5, 0, yPos)
-			btn.BackgroundColor3 = IgnoreList[player.UserId] and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(50, 50, 50)
-			btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-			btn.Font = Enum.Font.SourceSansBold
-			btn.TextSize = 14
-			btn.Text = player.Name
-			btn.BorderSizePixel = 0
-
-			-- عند الضغط على الاسم يبدل حالة التجاهل
-			btn.MouseButton1Click:Connect(function()
-				if IgnoreList[player.UserId] then
-					IgnoreList[player.UserId] = nil
-					btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-				else
-					IgnoreList[player.UserId] = true
-					btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-				end
-			end)
-
-			ignoreButtons[player.UserId] = btn
-			yPos = yPos + 35
-		end
-	end
-
-	-- تحديث حجم الكانفس للتمرير
-	ignoreListFrame.CanvasSize = UDim2.new(0, 0, 0, yPos)
-end
-
--- استدعاء التحديث أول مرة
-UpdateIgnoreList()
-
--- تحديث القائمة كل ما دخل لاعب جديد أو خرج
-Players.PlayerAdded:Connect(UpdateIgnoreList)
-Players.PlayerRemoving:Connect(function(player)
-	IgnoreList[player.UserId] = nil
-	UpdateIgnoreList()
+-- زر تفعيل/إيقاف التحقق من الفريق للأيمبوت فقط
+local teamCheckBtn = Instance.new("TextButton", frame)
+teamCheckBtn.Size = UDim2.new(0.9, 0, 0, 30)
+teamCheckBtn.Position = UDim2.new(0.05, 0, 0.53, 0)
+teamCheckBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+teamCheckBtn.Text = "Team Check: OFF"
+teamCheckBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+teamCheckBtn.Font = Enum.Font.SourceSansBold
+teamCheckBtn.TextSize = 14
+teamCheckBtn.MouseButton1Click:Connect(function()
+	teamCheck = not teamCheck
+	teamCheckBtn.Text = teamCheck and "Team Check: ON" or "Team Check: OFF"
 end)
 
 -- زر فتح وغلق الـ GUI
@@ -347,14 +281,16 @@ RunService.RenderStepped:Connect(function()
 
 		for _, player in ipairs(Players:GetPlayers()) do
 			if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(AimPart) and player.Character:FindFirstChild("Humanoid") then
-				if not IgnoreList[player.UserId] then -- يتجاهل اللاعبين في القائمة
-					local humanoid = player.Character.Humanoid
-					if humanoid.Health > 0 then
-						local pos, onScreen = Camera:WorldToViewportPoint(player.Character[AimPart].Position)
-						local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
-						if onScreen and dist <= AimZoneRadius and dist < closestDist then
-							closest = player
-							closestDist = dist
+				if not IgnoreList[player.UserId] then -- تجاهل لاعبين بقائمة التجاهل
+					if not teamCheck or (teamCheck and player.Team ~= LocalPlayer.Team) then
+						local humanoid = player.Character.Humanoid
+						if humanoid.Health > 0 then
+							local pos, onScreen = Camera:WorldToViewportPoint(player.Character[AimPart].Position)
+							local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+							if onScreen and dist <= AimZoneRadius and dist < closestDist then
+								closest = player
+								closestDist = dist
+							end
 						end
 					end
 				end
